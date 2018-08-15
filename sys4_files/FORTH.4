@@ -1,0 +1,211 @@
+: recurse LATEST @ >cfa , ; IMMED  
+: } ; : { 1 >r begin ' dup lit recurse = if I+ then lit } = if I- then I 0= until rdrop ; IMMED
+: 'lit lit lit , ; 
+: 'c 'lit ' , lit , , ; IMMED 
+: --> 1 CBLK +! CBLK @ load ;
+: wq dup dup bsav rdblk load ;
+: ifn lit 0= , [comp] if ; IMMED
+: for 'c >r 'c >r [comp] begin ; IMMED    
+: end 'c I 'c N 'c = [comp] until 'c rdrop 'c rdrop ; IMMED   
+: do 'lit 0 , lit swap , [comp] for ; IMMED 
+: brk rdrop rdrop rdrop exit ;      
+: rep ' swap do dup , I+ end drop ; 											{ [ n rep fn ] }    
+: repeat 'c branch swap HERE @ - , dup HERE @ swap - swap ! ; IMMED             
+: case 0 ; IMMED : of 'c over 'c = [comp] if 'c drop ; IMMED                    
+: enc begin dup? if [comp] then repeat ; IMMED                                  
+: loop 'c I+ [comp] end ; IMMED  
+: loopc begin dup? if [comp] loop repeat ; IMMED  
+: leave r> N N I < if 1+ else 1- then rdrop >r >r ;                               
+: 0c 0 ; IMMED 
+: [p] ' begin nex dup lit exit = ifn , repeat 2drop ; IMMED						{ postpone inlines next word }  
+: abs dup 0< if -1 * then ; 
+: max over over > ifn swap then drop ;
+: min over over < ifn swap then drop ;
+
+{ indexes }
+: I! r@ 4+ @ ! ; : I+! r@ 4+ +! ; : N! r@ 8 + ! ; 
+: J! r@ 12 + ! ; : K! r@ 16 + ! ;
+
+{ bit & base }
+: DEC 10 BASE ! ; : HEX 16 BASE ! ; : BIN 2 BASE ! ; : B36 36 BASE ! ;  
+: 0x HEX word eval DEC ; IMMED   
+: 0xb BIN word eval DEC ; IMMED  
+: b1 1 swap << or ; 
+: b1! over @ swap b1 swap ! ;   
+: b@ >> 1 and ; : b0 1 swap << not and ; 
+: b0! over @ swap b0 swap ! ;          
+: B. 32 do dup 0x 80000000 and 31 >> U. 1 << loop drop ;
+
+{ HEAP alloc }                             
+: cells 4 * ; 
+: alloc HERE @ swap HERE +! ; 
+: #align >r dup I % I - abs + rdrop ;                                           
+: palloc HERE @ 0x FFF not and 0x 1000 + dup rot + HERE ! ;   					{ page(4k) alloc }
+: const word create DOCOL , 'lit , lit exit , ;               
+: ]const ;
+: const[ begin word 2dup find >cfa lit ]const = ifn 
+	create DOCOL , 'lit 0 , lit exit , repeat 2drop ; 
+: var 1 cells alloc const ; 
+: var? word 2dup find ifn 1 cells alloc rot create DOCOL , 'lit , lit exit , 
+	else 2drop then ; 
+: to ' 8 + ! ;																	{ stores val to const }
+: [to] 'lit ' , 'lit 8 , 'c + 'c ! ; IMMED										{ stores in constant val [to] const }
+: alignalt 3 + 3 not and ; : align dup 4 % 4 - abs + ;  
+var? HEAP var? HEAP-END                            
+: here4 HERE @ align HERE ! ; : heap4 HEAP @ align HEAP ! ;                     
+: HEAP-NEW 1024 10000 * here4 alloc HEAP ! HERE @ HEAP-END ! 					{ 10 mb heap }
+	[str] -- NEW HEAP -- " CR prn ;
+: HEAP? HEAP @ dup 0= swap HEAP-END @ >= or if HEAP-NEW then ;                  
+: ncll HEAP? heap4 HEAP @ swap HEAP +! ;     
+: h" W_LATEST @ >r 1 ncll dup >r begin N l@ dup 34 = ifn I l! I+ N+ repeat 		{ heap string }
+	r> HEAP ! r> 1+ W_LATEST ! drop 1+ ;     
+var PREV-HERE																	{ heap compiling and such }
+: HEAP[ HERE @ PREV-HERE ! HEAP HERE ! ; IMMED
+: ]HEAP	PREV-HERE @ HERE ! ; IMMED
+HEAP? 
+
+{ strings  & printing }
+: . SPC dup 0< if 45 emit 1- not then U. ; 
+: TAB 9 emit ;  
+: strlen 0 >r begin dup l@ 0= ifn 1+ I+ repeat drop r> ; 
+: strcmp >r >r begin I l@ N l@ - dup 0= I 1+ l@ 0= not and if drop I+ N+ repeat 
+  dup 0< if drop -1 else 0= if 0 else 1 then then rdrop rdrop ;                 
+: strfll do 2dup ! 1+ loop 2drop ; 
+
+{ word read }
+64 alloc const wordbuff                                                         
+: rdkey begin lkey until lkey keydis ; 
+: [msg] [comp] [str] 'c prn ; IMMED      
+: rdword SPC 0 >r begin rdkey dup dup emit wordbuff I + l! I+ 32 <= until 
+	0 wordbuff I + l! wordbuff r> 1- ;                                             
+: rdbw	0 >r 1- begin 1+ dup l@ dup wordbuff I + l! I+ 32 <= until 1+            
+	0 wordbuff I + l! wordbuff r> 1- ;                                            
+
+{ FAT }
+2000 const FAT      FAT 1 xb hdrd                                       
+xb 0x B + w@ const fat_bps  xb 0x D + l@ const fat_spc                          
+xb 0x E + w@ const fat_nrs  xb 0x 10 + l@ const fat_nfat                        
+xb 0x 24 + @ const fat_spf  xb 0x 2C + @ const fat_1c                           
+FAT fat_nrs + const 1FAT fat_spc 512 * alloc const xb                           
+1024 alloc const TFAT fat_spc fat_bps * const fat_csze 
+
+: fat-info [msg] bytes per sector:" fat_bps . CR [msg] sectors per cluster:" 
+	fat_spc . CR [msg] reserved sectors:" fat_nrs . CR
+	[msg] number of FATs:" fat_nfat . CR
+	[msg] sectors per FAT:" fat_spf . CR
+	[msg] root dir 1st cluster:" fat_1c . CR ;                           
+
+FAT fat_nrs + fat_nfat fat_spf * + const fat_begin var CDIR 2 CDIR !            
+: fat_addr 2 - fat_spc * fat_begin + ; : fat@ 32 * xb + ;                       
+: xbrd fat_spc xb hdrd ;                                                        
+: fat_nex dup 128 / 1FAT + 1 TFAT hdrd 127 % 4 * TFAT + @ ;                     
+: fat_rdx fat_addr xbrd ;                                                       
+: fatdptr dup 20 + w@ 16 << swap 26 + w@ or ; : fatfsze 28 + @ ;                
+
+: "f fat@ >r I 11 prnc I 28 + @ . I 11 + l@ 4 b@ if [msg] -->" then rdrop ;     
+: LS fat_addr xbrd 32 do I fat@ l@ case 229 of else 0 of leave else drop CR 
+  I "f enc loop ; : fatnex? fat_nex dup 0x FFFFFFF = ;  
+: LS CDIR @ begin dup LS fatnex? until drop ;  
+
+16 alloc const cdbu 
+: cdbr 32 cdbu 7  strfll 0 cdbu 8  + l! cdbu ;    
+: cdbe cdbr word cmove ;  
+: CD fat_rdx 32 do I fat@ cdbu over strcmp 0= if fatdptr CDIR ! brk then drop loop ; 
+: CD cdbr word cmove CDIR @ begin dup CD fatnex? until drop CDIR @ 0= if 2 CDIR ! then ;
+
+var LFILE var LSZE : LRST 0 LFILE ! ; : LFILE? LFILE @ 0= not ;                 
+: rdcls LFILE @ >r begin dup fat_addr fat_spc I hdrd fat_csze I+! fatnex? until drop rdrop ;
+: fatrd >r I fatfsze dup LSZE ! 512 #align alloc LFILE ! r> fatdptr rdcls ;     
+: LD fat_rdx 32 do I fat@ cdbu over strcmp 0= if fatrd brk then drop loop ;     
+: LD LRST cdbe CDIR @ begin dup LD fatnex? LFILE? or until drop LFILE @ ;       
+
+: BEVAL W_LATEST @ BTMP ! W_LATEST ! begin interpret lastNIL? @ until 
+	0 lastNIL? ! BTMP @ W_LATEST ! ;  
+: loadf LD BEVAL ; 
+: page 0 >r >r CLR begin I l@ dup 0= N 17 = or ifn dup emit 10 = if N+ then I+ repeat drop r> rdrop ;
+: page begin page rdkey drop dup l@ 0= until drop ;
+: lpage LFILE @ page ;
+
+{ rand }
+var nseed 721 nseed !        
+: rand nseed @ 1103515245 * 12345 + nseed ! nseed @ 65536 /mod drop ;           
+: rnd rand swap % ; 
+: rnda rnd abs ;                
+
+{ math }
+3.14159 const PI
+PI 2 * const 2PI
+: neg -1 * ; : f. 1.0 * ;   
+: pow over swap 1 swap for over * 1.0 / I+ end swap drop ; 
+: radians 1.0 180.0 */ PI 1.0 */ ; 
+: f/ 1.0 swap */ ;  
+: f* 1.0 */ ;  
+: "sr" dup PI neg < if 2PI + else dup PI > if 2PI - then then ; 
+: sin 2PI % "sr" >r 1.27323 I f* 0.40528 I f* I f* I 0 < if + else - then r> drop ;      
+: cos 1.57079 + sin ;   
+: tan dup cos >r sin 1.0 r> */ ; 
+: cso 2dup 2 * % 1.0 * swap 10 * 31 f/ f/ swap drop ; 
+
+{ graphics }
+var "s : slp r> K N - J I - f/ dup 0= if drop 1.0 then "s ! >r ;                
+: prep r> slp N f. N! K f. K! >r ; : "dw dup N J 1.0 / pix l! ;                 
+: xy r> I J = ifn I+ then N K = ifn "s @ N + N! then >r ;                       
+: ok? r> N K "s @ 0> if >= else <= then I J = and swap >r ;                     
+: drawl >r >r >r >r prep begin xy "dw ok? until [ 4 rep rdrop ] drop ;
+
+{ lisp }
+: tag 4 % ; : dtag dup tag - ; 
+: NIL? NIL = ; 
+: sym? dup tag 1 = swap dtag cdr NIL? and ; 
+: num? dup dup cdr swap - 12 % 0= 0= swap cdr NIL? 0= and ;
+: cel? >r case I NIL? if 0 else I sym? if 0 else I num? if 0 else 1 enc rdrop ;
+: type >r SPC case 
+	I NIL? if [msg] NIL" else
+	I cel? if [msg] cel" else
+	I sym? if [msg] sym" else
+	I num? if [msg] num" enc rdrop ;
+: prs dtag car SPC prn ; : pNIL [str] NIL " prn ;
+
+: cons 2 cells ncll >r swap I ! I 4+ ! r> ;
+: ( [ 'lit ]  recurse ;
+: ) NIL begin over lit ( = if swap drop exit then cons again ;
+: get 1- dup? if do cdr I+ end then car ;
+: " [comp] h" NIL cons 1+ ; IMMED 
+: prnl >r case 
+	I NIL? if pNIL else I num? if I . else I sym? if I prs else
+	SPC 40 emit begin I car recurse r> cdr >r I NIL? until SPC 41 emit 
+	enc rdrop ;
+	
+{ indexes & loops }
+: Icdr N cdr N! ;
+
+{ cells }
+var m1
+var MADE
+( NIL ) m1 !
+( NIL ) MADE ! 
+: l2stk begin dup car swap cdr dup NIL? until drop ;							{ dumps list to stack: lst -- }
+: cllcpy ( swap l2stk ) ;														{ list copy: lst -- }
+: val car cllcpy ;
+: lastl begin dup cdr NIL? ifn cdr repeat ;
+: append lastl 4+ ! ;
+: linkl lastl >r NIL cons r> 4+ !  ;
+: dropl dup cdr NIL? if NIL swap ! else 
+  begin dup cdr cdr NIL? ifn cdr repeat 4+ NIL swap ! then ;
+: pushv dup >r @ cons I! rdrop ; 
+: popv  dup @ car >r dup @ cdr swap ! r> ; 
+: make	MADE @ m1 pushv ( NIL ) MADE ! ; 
+: link 	MADE @ linkl ;
+: merge	MADE @ cdr m1 popv MADE ! link ;
+: made 	MADE @ cdr ;
+: flatten dup val >r begin cdr dup NIL? ifn dup val I append repeat drop r> ; 
+
+{ timing }
+: bench[ TICKS 0! ;
+: ]bench [msg] elapsed: " TICKS @ . ; 
+
+
+
+
+
+

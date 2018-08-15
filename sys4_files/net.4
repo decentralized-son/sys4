@@ -1,0 +1,86 @@
+{ array tools & neural network }
+
+: # * + ;
+: a+ 4 * + ;
+: a- 4 * - ;
+: addra >r I 1+ cells alloc dup r> swap ! 1 a+ ;								{ no name array allocation }
+: array addra [comp] const ;													{ array with length at [-1] }
+: n@ do dup @ swap 1 a+ loop drop ;												{ multifetch: addr n -- ... }
+: n! do dup rot ! 1 a+ loop drop ;												{ multistore: addr n -- }
+: [[ ;			
+: ]]  a+ @ ;
+: ]]! a+ ! ;
+: h[ 0 , HERE @ ;																{ starts array marker, skips 1 for length }
+: ]addr >r I HERE @ - 4 / abs I -1 a+ ! r> ;									{ stores length, address only array }
+: ]array ]addr [comp] const ;													{ compiles array needs a ,  b , etc }	
+: lst2arr h[ swap begin dup car , cdr dup NIL? until drop ]addr ;				{ converts a list to array: lst -- arr } 
+: )a ) lst2arr ;
+: )array )a [comp] const ;
+
+
+: arrhrn SPC 91 emit do dup @ SPC D. 1 a+ loop drop SPC 93 emit ;
+: arrprn SPC 91 emit do dup @ . 1 a+ loop drop SPC 93 emit ;					{ display array: addr len -- }
+: arrprnc dup -1 ]] arrprn ;													{ display array w count on [0]: addr -- }
+: arr@prn SPC 91 emit >r I -1 ]] do J I ]] @ . loop 
+	rdrop SPC 93 emit ;															{ displays the contents: arr -- } 
+: arrcolp >r dup -1 ]] do J xpos l! dup I ]] . CR loop drop rdrop ;				{ arr vertical prn: arr xpos -- }
+
+
+
+{ neural net ----------------------------------------------------------------- }
+
+
+: L] -1 ]] ;																	{ array length: arr -- len }
+: 2] rot ]] swap ]] ;															{ 2d array access: arr x y -- val }
+: 2]! rot ]] swap ]]! ;
+
+: sigm dup abs 1.0 + f/ ;														{ approx sigmoid x -- sx }
+
+: netwidth L] 1- 3 * 1+ ;														{ net width: arr -- width }
+: netlloc make >r I 0 ]] addra link 											{ net allocation: arr -- net }
+	I L] 1- do J I 1+ ]] J I ]] * 1+ addra link									{ allocs i w e o }
+	J I 1+ ]] dup addra link addra link loop rdrop made lst2arr ;
+: wts-rnd >r I L] do 1.0 rnd J I ]]! loop rdrop ;
+: wts-init dup 1 a+ swap L] 3 / do dup @ wts-rnd 3 a+ loop drop ;
+
+const[ _n _in _wt _en _ou _len ]const
+: nlen L] 1- 3 / ;
+: c_ly >r 0 _len do _in I ]] J I ]] f* + loop rdrop ;							{ does wt for en[i]: wtoffset -- en }
+: c_wt 1- >r 	_n I ]] [to] _en _n I 1- ]] [to] _wt 
+				_n I 2 - ]] [to] _in _in L] [to] _len rdrop 
+	_en L] do _wt _len I * a+ c_ly _en I ]]! loop ;
+: c_out _n swap ]] [to] _ou _ou L] do _en I ]] sigm _ou I ]]! loop ;
+: c_out2 >r _n I L] do _n J -1 I 2] sigm _n J I 2]! loop rdrop ;
+: nrun [to] _n _n nlen do I 1+ 3 * dup c_wt c_out loop ;
+
+
+var cy
+: nedisp CR >r 0 ypos l@ cy ! I L] 
+	do J I ]] over arrcolp 8 + align cy @ ypos l! loop 
+	rdrop drop cy @ 10 + ypos l! ;
+
+
+( 2 3 1 )array nns
+nns netlloc const net
+net wts-init 	
+1.0 0.5 net @ 2 n!
+net nrun
+net nedisp
+
+	
+	
+{ calculation & misc }	
+
+
+{ backprop }
+
+
+
+
+
+
+
+
+
+	
+

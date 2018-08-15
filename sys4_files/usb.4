@@ -1,0 +1,16 @@
+{ USB }                                                                         
+: usb-det ( 0c 256 do 32 do 8 do X J I 10 pci_r4 0x 0C03 = if 
+  ( X J I X J I 9 pci_r2 X J I 16 pci_r8 X J I 0x 3C pci_r2 ) dup prnl then loopc ) ; 
+: usb-ehci >r begin I car 4 get 32 = if r> car exit then r> cdr >r again ;     
+	usb-det usb-ehci const usbeh usbeh 5 get const usba 
+usba 4+ l@ 15 and const usbnp usba dup l@ + const usbcm usbcm 4+ const usbst    
+: usb-p 4 * usba 68 + + B. ; : usb-pl CR usbnp do I usb-p CR loop ;             
+: ehcihlt usbcm 0 b0! begin usbst 12 b@ until [msg] ehci-hlt" ;                 
+: ehcireset ehcihlt usbcm 1 b1! begin usbcm 2 b@ 0= until [msg] ehci-reset" ; 
+
+96 2 * palloc const asyncl                                                      
+: ehcisetup  7 usbcm 8 + !                                                        
+0 usbcm 12 + !                                                                  
+asyncl usbcm 0x 14 + !                                                          
+0x 3F usbst ! 0x 80021 usbcm !                                                  
+1 usbcm 0x 40 + ! ; ehcireset ehcisetup      

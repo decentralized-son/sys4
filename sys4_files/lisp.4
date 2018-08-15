@@ -1,0 +1,53 @@
+{ lisp }
+
+: tag 4 % ; : dtag dup tag - ; 
+: NIL? NIL = ; 
+: sym? dup tag 1 = swap dtag cdr NIL? and ; 
+: num? dup dup cdr swap - 12 % 0= 0= swap cdr NIL? 0= and ;
+: cel? >r case I NIL? if 0 else I sym? if 0 else I num? if 0 else 1 enc rdrop ;
+: type >r SPC case 
+	I NIL? if [msg] NIL" else
+	I cel? if [msg] cel" else
+	I sym? if [msg] sym" else
+	I num? if [msg] num" enc rdrop ;
+: prs dtag car SPC prn ; : pNIL [str] NIL " prn ;
+
+: cons 2 cells ncll >r swap I ! I 4+ ! r> ;
+: ( [ 'lit ]  recurse ;
+: ) NIL begin over lit ( = if swap drop exit then cons again ;
+: get 1- dup? if do cdr I+ end then car ;
+: " [comp] h" NIL cons 1+ ; IMMED 
+: prnl >r case 
+	I NIL? if pNIL else I num? if I . else I sym? if I prs else
+	SPC 40 emit begin I car recurse r> cdr >r I NIL? until SPC 41 emit 
+	enc rdrop ;
+	
+{ indexes & loops }
+: Icdr N cdr N! ;
+
+{ cells }
+var m1
+var MADE
+( NIL ) m1 !
+( NIL ) MADE ! 
+: l2stk begin dup car swap cdr dup NIL? until drop ;							{ dumps list to stack: lst -- }
+: cllcpy ( swap l2stk ) ;														{ list copy: lst -- }
+: val car cllcpy ;
+: lastl begin dup cdr NIL? ifn cdr repeat ;
+: append lastl 4+ ! ;
+: linkl lastl >r NIL cons r> 4+ !  ;
+: dropl dup cdr NIL? if NIL swap ! else 
+  begin dup cdr cdr NIL? ifn cdr repeat 4+ NIL swap ! then ;
+: pushv dup >r @ cons I! rdrop ; 
+: popv  dup @ car >r dup @ cdr swap ! r> ; 
+: make	MADE @ m1 pushv ( NIL ) MADE ! ; 
+: link 	MADE @ linkl ;
+: merge	MADE @ cdr m1 popv MADE ! link ;
+: made 	MADE @ cdr ;
+: flatten dup val >r begin cdr dup NIL? ifn dup val I append repeat drop r> ; 
+
+
+
+
+
+

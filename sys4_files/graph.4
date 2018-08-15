@@ -1,0 +1,9 @@
+{ graphics }
+
+{ old hdd edit routines }
+: drawedit 3 0 91 640 91 drawl ;                                                
+: drawarea 15 640 0 640 325 drawl 15 0 325 640 325 drawl ;                      
+: cur-set ypos w! xpos w! ; : edit edit drawedit drawarea ;                     
+: xp! xpos w! ; : yp! ypos w! ;                                                 
+: 0p! 0 0 cur-set ;
+

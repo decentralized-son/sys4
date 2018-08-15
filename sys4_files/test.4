@@ -1,0 +1,40 @@
+{
+128 alloc const lispwb
+: lchk dup 39 >= swap 41 <= and ;
+: lsto lispwb ! 0 lispwb 1+ ! ;
+: tok2 >r 0 >r begin N l@ lispwb I + ! N l@ 32 <= N I+ N+ l@ 41 = or until N- I-
+  N N I - I rdrop rdrop ;
+: tok dup l@ dup case
+	0  of drop 0 else
+	32 of drop 1+ recurse else
+	over lchk if drop lsto dup 1+ swap 1 else
+	2drop tok2 enc ;
+	
+: ()? >r over l@ r> = if 2drop 1 else 0 then ; 
+: (? 40 ()? ; : )? 41 ()? ;
+	
+
+: rdsym dup ncll dup >r rot cmove r> enc ;
+: rdlst begin tok rd swap tok recurse cons then swap drop ;
+: read tok (? if  else rdsym then ;
+}
+	
+{ cell fns }
+var m1
+var MADE
+( NIL ) m1 !
+( NIL ) MADE ! 
+: lastl dup cel? if begin dup cdr NIL? ifn cdr repeat then ;
+: linkl lastl >r NIL cons r> 4+ !  ;
+: dropl dup cdr NIL? if NIL swap ! else 
+  begin dup cdr cdr NIL? ifn cdr repeat 4+ NIL swap ! then ;
+: pushv dup >r @ cons I! rdrop ; 
+: popv  dup @ car >r dup @ cdr swap ! r> ; 
+: MK[	MADE @ m1 pushv NIL MADE ! ; 
+: link	MADE @ linkl ;
+: ]MK	MADE @ m1 popv MADE ! link ;
+: fuckit 10 10 + ;
+: makesnosense 10 ;
+
+
+

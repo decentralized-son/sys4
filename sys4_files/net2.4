@@ -1,0 +1,88 @@
+{ array tools & neural network }
+
+: # * + ;
+: a+ 4 * + ;
+: a- 4 * - ;
+: addra >r I 1+ cells alloc dup r> swap ! 1 a+ ;						{ no name array allocation }
+: array addra [comp] const ;											{ array with length at [-1] }
+: n@ do dup @ swap 1 a+ loop drop ;										{ multifetch: addr n -- ... }
+: n! do dup rot ! 1 a+ loop drop ;										{ multistore: addr n -- }
+: [[ ;			
+: ]]  a+ @ ;
+: ]]! a+ ! ;
+: h[ 0 , HERE @ ;														{ starts array marker, skips 1 for length }
+: ]addr >r I HERE @ - 4 / abs I -1 a+ ! r> ;							{ stores length, address only array }
+: ]array ]addr [comp] const ;											{ compiles array needs a ,  b , etc }	
+: lst2arr h[ swap begin dup car , cdr dup NIL? until drop ]addr ;		{ converts a list to array: lst -- arr } 
+: )a ) lst2arr ;
+: )array )a [comp] const ;
+
+
+: arrhrn SPC 91 emit do dup @ SPC D. 1 a+ loop drop SPC 93 emit ;
+: arrprn SPC 91 emit do dup @ . 1 a+ loop drop SPC 93 emit ;			{ display array: addr len -- }
+: arrprnc dup -1 ]] arrprn ;											{ display array w count on [0]: addr -- }
+: arr@prn SPC 91 emit >r I -1 ]] do J I ]] @ . loop 
+	rdrop SPC 93 emit ;													{ displays the contents: arr -- } 
+
+
+{ neural net ----------------------------------------------------------------- }
+var inputs																{ 1st layer inputs, write here }
+var net	
+var outp						
+
+: sigm dup abs 1.0 + f/ ;												{ approx sigmoid x -- sx }
+: neulloc 2 * 3 + cells alloc 1 a+ ;									{ allocs e o n w i neuron: n_inputs -- addr }
+: ni 1 4 * + @ ;														{ number of inputs: neuron -- n }
+: wts dup 2 a+ swap ni ;												{ addr and wt len: neuron -- addr nwts }
+: inps dup wts a+ swap ni ; 											{ addr and input len:  neuron -- addr ninputs } 
+: wt-rnd wts do dup 1.0 rnd swap ! 1 a+ loop drop ;						{ randomize neuron weights: addr -- }
+: inp-set inps drop swap dup -1 ]] dmove ;								{ sets inputs: arr neuron -- }
+: neuron >r I neulloc r> over 1 a+ ! dup wt-rnd ;						{ make a neuron with random weights: ninputs -- addr }
+: aneuron dup -1 ]] neuron >r I inp-set r> ;							{ arr -- neuron  }
+: inarr addra >r h[ I -1 ]] do J I a+ , loop ]addr r> inputs ! ;		{ input arrays: len -- inputlayerarray } 
+: lay_mk make do dup aneuron link loop drop made lst2arr merge ;		{ makes a layer: input_arr len -- layerarr } 
+: net_mk >r I car inarr Icdr 											{ makes a nn: lenlst -- }
+	begin I car lay_mk Icdr I NIL? until r> 2drop 
+	made lastl car lst2arr outp ! made flatten lst2arr net ! ;
+	
+
+{ calculation & misc }	
+
+var nres  																{ run neuron stores on[0]: addr --  }
+: nrun nres 0! dup dup inps drop swap wts 
+	do over I ]] @ over I ]] 1.0 */ nres +! loop 						{ inputs has double @ since its an address }
+	2drop nres @ over -1 ]]! nres @ sigm swap ! ;
+	{ 2drop 1.0 nres @ + sigm swap ! ;  bias is suppossed to have a wt too so we're not including }
+
+: ntrun >r I -1 ]] do J I ]] nrun loop rdrop ; 							{ runs a net array: arr -- }
+: netrun inputs @ swap dup -1 ]] dmove net @ ntrun ;					{ runs net with inputs: inputarr -- }
+
+{ backprop }
+
+var err
+: errc err 0! >r >r I -1 ]] do K I ]] J I ]] - err +! loop 				{ calculates error: inparr tararr -- err }
+	err @ dup * 2.0 f/ rdrop rdrop ;
+
+
+: nedisp >r CR
+	[msg] a" SPC I D. CR
+	[msg] e" I 1- a+ 1 arrprn CR
+	[msg] o" I 1 arrprn CR
+	[msg] w" I wts arrprn CR
+	[msg] i" I inps arrhrn CR rdrop ;
+	
+: odisp outp @ arr@prn ;
+: np net @ swap ]] nedisp ;
+
+( 2 1 ) net_mk
+
+
+
+
+
+
+
+
+
+	
+
